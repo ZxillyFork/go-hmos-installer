@@ -85,7 +85,7 @@ sysroot, `CGO_ENABLED=1`, and external linking. The target is
 `GOOS=openharmony` with `GOARCH=arm64` or `amd64`; the SDK triples are
 `aarch64-linux-ohos` and `x86_64-linux-ohos`.
 
-Read [the port documentation](https://github.com/ZxillyFork/go-hmos/blob/fcaf70eef17b74d6acb8fd220d80edab8fdf3799/doc/openharmony.md)
+Read [the port documentation](https://github.com/ZxillyFork/go-hmos/blob/50a9db343e53ec569374c328998b3ffbada8f850/doc/openharmony.md)
 and [its implementation and verification status](https://github.com/ZxillyFork/go-hmos/pull/1)
 before building for devices. This installer does not download the SDK, deploy to
 a phone, or establish commercial HarmonyOS NEXT compatibility.

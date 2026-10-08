@@ -26,7 +26,7 @@ const repository = "https://github.com/ZxillyFork/go-hmos.git"
 
 // sourceCommit is a complete, reviewed port commit, not a moving branch.
 // Keep it separate from the commit that adds this installer to avoid self-reference.
-const sourceCommit = "fcaf70eef17b74d6acb8fd220d80edab8fdf3799"
+const sourceCommit = "50a9db343e53ec569374c328998b3ffbada8f850"
 const installerVersion = "0.1.0-dev"
 const minimumBootstrap = "go1.24.6"
 

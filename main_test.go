@@ -281,3 +281,26 @@ func TestPinnedSource(t *testing.T) {
 		t.Fatalf("installer source pin is not a full commit: %q", sourceCommit)
 	}
 }
+
+func TestUpgradeAndRollback(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "SDK with spaces")
+	secondCommit := "2222222222222222222222222222222222222222"
+	cachedToolchain(t, home, testCommit)
+	cachedToolchain(t, home, secondCommit)
+	i := installer{home: home, repository: "must not be contacted", out: io.Discard}
+	for _, commit := range []string{testCommit, secondCommit, testCommit} {
+		i.commit = commit
+		if _, err := i.install(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := selectedRoot(home)
+		if err != nil || got != rootPath(home, commit) {
+			t.Fatalf("select %s: %q %v", commit, got, err)
+		}
+	}
+	for _, commit := range []string{testCommit, secondCommit} {
+		if !complete(rootPath(home, commit), commit) {
+			t.Fatalf("selection discarded completed toolchain %s", commit)
+		}
+	}
+}
