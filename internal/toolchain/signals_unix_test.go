@@ -21,7 +21,7 @@ import (
 func TestVersionTerminalSignals(t *testing.T) {
 	bin := installCommands(t)
 	base := t.TempDir()
-	root := cachedToolchain(t, filepath.Join(base, testVersion.Name+"-hmos"), testVersion.Commit)
+	root := cachedToolchain(t, filepath.Join(base, testVersion.Name), testVersion.Commit)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

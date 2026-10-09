@@ -23,7 +23,7 @@ type Version struct {
 	GOVersion string
 }
 
-var commandName = regexp.MustCompile(`^go[0-9]+\.[0-9]+\.[0-9]+$`)
+var commandName = regexp.MustCompile(`^go[0-9]+\.[0-9]+\.[0-9]+-hmos$`)
 
 // Main runs a versioned command, preserving Go's argument and exit behavior.
 func Main(v Version) {
@@ -38,7 +38,7 @@ func Main(v Version) {
 }
 
 func (v Version) run(args []string) error {
-	if !commandName.MatchString(v.Name) || !fullCommit.MatchString(v.Commit) || v.GOVersion != v.Name+"-hmos-devel" {
+	if !commandName.MatchString(v.Name) || !fullCommit.MatchString(v.Commit) || v.GOVersion != v.Name+"-devel" {
 		return errors.New("invalid compiled-in version configuration")
 	}
 	if len(args) == 1 && args[0] == "--version" {
@@ -86,13 +86,13 @@ type forwardedExitError struct{ *exec.ExitError }
 
 func versionHome(name string) (string, error) {
 	if base := os.Getenv("GOHMOS_SDK_HOME"); base != "" {
-		return filepath.Abs(filepath.Join(base, name+"-hmos"))
+		return filepath.Abs(filepath.Join(base, name))
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "sdk", name+"-hmos"), nil
+	return filepath.Join(home, "sdk", name), nil
 }
 
 func versionEnv(env []string, root string) []string {

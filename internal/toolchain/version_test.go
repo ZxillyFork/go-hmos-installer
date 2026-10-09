@@ -7,6 +7,8 @@ package toolchain
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +23,7 @@ import (
 	"testing"
 )
 
-var testVersion = Version{Name: "go1.27.2", Commit: "b637b8617624655906b737977f50de5280bf7f65", GOVersion: "go1.27.2-hmos-devel"}
+var testVersion = Version{Name: "go1.27.2-hmos", Commit: "b637b8617624655906b737977f50de5280bf7f65", GOVersion: "go1.27.2-hmos-devel"}
 
 func TestVersionHomes(t *testing.T) {
 	base := t.TempDir()
@@ -30,13 +32,13 @@ func TestVersionHomes(t *testing.T) {
 	t.Setenv("HOME", base)
 	t.Setenv("USERPROFILE", base)
 	got, err := versionHome(testVersion.Name)
-	if err != nil || got != filepath.Join(base, "sdk", testVersion.Name+"-hmos") {
+	if err != nil || got != filepath.Join(base, "sdk", testVersion.Name) {
 		t.Fatalf("default home = %q, %v", got, err)
 	}
 	t.Setenv("GOHMOS_SDK_HOME", filepath.Join(base, "custom SDK"))
-	for _, name := range []string{testVersion.Name, "go1.27.3"} {
+	for _, name := range []string{testVersion.Name, "go1.27.3-hmos"} {
 		got, err := versionHome(name)
-		if err != nil || got != filepath.Join(base, "custom SDK", name+"-hmos") {
+		if err != nil || got != filepath.Join(base, "custom SDK", name) {
 			t.Fatalf("custom home = %q, %v", got, err)
 		}
 	}
@@ -116,6 +118,11 @@ func init() {
 // depending on the public repository already containing the new package.
 func installCommands(t *testing.T) string {
 	t.Helper()
+	return installCommandsInto(t, "")
+}
+
+func installCommandsInto(t *testing.T, bin string) string {
+	t.Helper()
 	const module = "github.com/ZxillyFork/go-hmos-installer"
 	const version = "v0.0.0-20261009000000-000000000000"
 	base := t.TempDir()
@@ -171,7 +178,9 @@ func installCommands(t *testing.T) string {
 	if err := archive.Close(); err != nil {
 		t.Fatal(err)
 	}
-	bin := filepath.Join(base, "bin")
+	if bin == "" {
+		bin = filepath.Join(base, "bin")
+	}
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(proxy)}
 	if runtime.GOOS == "windows" {
 		u.Path = "/" + u.Path
@@ -181,7 +190,97 @@ func installCommands(t *testing.T) string {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go install @latest through local proxy: %s %v", output, err)
 	}
+	// The latest module must not keep exposing the old colliding command.
+	cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "install", module+"/go1.27.2@latest")
+	cmd.Env = replaceEnv(os.Environ(), map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off", "GOFLAGS": "-modcacherw", "GOSUMDB": "off", "GONOSUMDB": "", "GONOPROXY": "", "GOPRIVATE": "", "GOPROXY": u.String(), "GOBIN": bin, "GOMODCACHE": filepath.Join(base, "modcache")})
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "does not contain package") {
+		t.Fatalf("old colliding package is still installable at latest: %s %v", output, err)
+	}
 	return bin
+}
+
+// Opt-in network test uses the genuine official launcher, not a lookalike
+// fixture, and installs this fork alongside it through the local module proxy.
+// Pin the reviewed official module so future changes cannot alter this test.
+func TestOfficialLauncherCoexistence(t *testing.T) {
+	if os.Getenv("GOHMOS_TEST_OFFICIAL_DL") != "1" {
+		t.Skip("set GOHMOS_TEST_OFFICIAL_DL=1 to install the genuine golang.org/dl launcher")
+	}
+	base := t.TempDir()
+	bin := filepath.Join(base, "bin")
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "install", "golang.org/dl/go1.27.2@v0.0.0-20261008153204-cc176e44a3e9")
+	cmd.Env = replaceEnv(os.Environ(), map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off", "GOFLAGS": "-modcacherw", "GOBIN": bin})
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("install genuine official launcher: %s %v", output, err)
+	}
+	official := filepath.Join(bin, executable("go1.27.2"))
+	info, err := buildinfo.ReadFile(official)
+	if err != nil || info.Path != "golang.org/dl/go1.27.2" || info.Main.Path != "golang.org/dl" {
+		t.Fatalf("official launcher build identity: %+v %v", info, err)
+	}
+	before, err := os.ReadFile(official)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installCommandsInto(t, bin)
+	after, err := os.ReadFile(official)
+	if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
+		t.Fatalf("installing fork replaced official launcher: %v", err)
+	}
+	// Minimal official SDK fixture uses the real bootstrap Go binary to check
+	// both launchers run, without downloading an unrelated full upstream SDK.
+	userHome := filepath.Join(base, "home")
+	officialHome := filepath.Join(userHome, "sdk", "go1.27.2")
+	if err := os.MkdirAll(filepath.Join(officialHome, "bin"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	goBinary, err := os.ReadFile(filepath.Join(runtime.GOROOT(), "bin", executable("go")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(officialHome, "bin", executable("go")), goBinary, 0755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(officialHome, ".unpacked-success")
+	if err := os.WriteFile(marker, []byte("official SDK sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	forkHome := filepath.Join(userHome, "sdk", testVersion.Name)
+	cachedToolchain(t, forkHome, testVersion.Commit)
+	legacyHome := filepath.Join(base, "legacy")
+	if err := os.MkdirAll(legacyHome, 0700); err != nil {
+		t.Fatal(err)
+	}
+	legacyState := filepath.Join(legacyHome, "current.json")
+	if err := os.WriteFile(legacyState, []byte("legacy sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	env := replaceEnv(os.Environ(), map[string]string{"HOME": userHome, "USERPROFILE": userHome, "GOHMOS_SDK_HOME": "", "GOHMOS_HOME": legacyHome, "GOTOOLCHAIN": "local"})
+	fork := filepath.Join(bin, executable(testVersion.Name))
+	for _, args := range [][]string{{"download"}, {"--version"}} {
+		cmd = exec.Command(fork, args...)
+		cmd.Env = env
+		if output, err := cmd.CombinedOutput(); err != nil || !bytes.Contains(output, []byte(testVersion.Commit)) {
+			t.Fatalf("fork %v: %s %v", args, output, err)
+		}
+	}
+	cmd = exec.Command(official, "version")
+	cmd.Env = env
+	if output, err := cmd.CombinedOutput(); err != nil || !bytes.Contains(output, []byte("go version "+runtime.Version())) {
+		t.Fatalf("official launcher version: %s %v", output, err)
+	}
+	for path, want := range map[string]string{marker: "official SDK sentinel", legacyState: "legacy sentinel"} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != want {
+			t.Fatalf("changed existing state %s: %q %v", path, got, err)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(officialHome, "bin", executable("go"))); err != nil || sha256.Sum256(got) != sha256.Sum256(goBinary) {
+		t.Fatalf("changed official SDK binary: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(userHome, "sdk", testVersion.Name+"-hmos")); !os.IsNotExist(err) {
+		t.Fatalf("created doubled-suffix SDK path: %v", err)
+	}
+	t.Logf("genuine %s %s unchanged; %s coexists in the same GOBIN", info.Path, info.Main.Version, testVersion.Name)
 }
 
 func TestInstalledVersionCommand(t *testing.T) {
@@ -196,7 +295,7 @@ func TestInstalledVersionCommand(t *testing.T) {
 	}
 	userHome := t.TempDir()
 	base := filepath.Join(userHome, "sdk")
-	officialHome := filepath.Join(base, testVersion.Name)
+	officialHome := filepath.Join(base, "go1.27.2")
 	if err := os.MkdirAll(officialHome, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +303,7 @@ func TestInstalledVersionCommand(t *testing.T) {
 	if err := os.WriteFile(officialMarker, []byte("official SDK must stay untouched"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	home := filepath.Join(base, testVersion.Name+"-hmos")
+	home := filepath.Join(base, testVersion.Name)
 	root := cachedToolchain(t, home, testVersion.Commit)
 	self, err := os.Executable()
 	if err != nil {
@@ -297,7 +396,7 @@ func TestRealVersionInstallation(t *testing.T) {
 	bin := installCommands(t)
 	launcher := filepath.Join(bin, executable(testVersion.Name))
 	base := filepath.Join(t.TempDir(), "versioned SDK with spaces")
-	home := filepath.Join(base, testVersion.Name+"-hmos")
+	home := filepath.Join(base, testVersion.Name)
 	t.Setenv("GIT_DIR", filepath.Join(base, "unrelated repo"))
 	t.Setenv("GIT_WORK_TREE", filepath.Join(base, "unrelated worktree"))
 	t.Setenv("GOOS", "openharmony")

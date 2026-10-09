@@ -38,6 +38,10 @@ jobs:
         run: go test -v ./...
       - name: Static checks
         run: go vet ./...
+      - name: Official and fork launchers coexist
+        env:
+          GOHMOS_TEST_OFFICIAL_DL: "1"
+        run: go test ./internal/toolchain -v -run '^TestOfficialLauncherCoexistence$' -timeout 5m
       - name: Legacy source install, cached reinstall, and host smoke test
         env:
           GOHMOS_TEST_REPOSITORY: https://github.com/ZxillyFork/go-hmos.git

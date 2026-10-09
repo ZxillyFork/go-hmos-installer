@@ -5,7 +5,7 @@ following the `golang.org/dl/go1.x` / `gotip` install-then-download pattern.
 They build a fixed source commit on your development computer without replacing
 your regular Go installation.
 
-`go1.27.2` builds the pinned development snapshot
+`go1.27.2-hmos` builds the pinned development snapshot
 [`b637b8617624655906b737977f50de5280bf7f65`](https://github.com/ZxillyFork/go-hmos/commit/b637b8617624655906b737977f50de5280bf7f65).
 The resulting toolchain identifies itself as **`go1.27.2-hmos-devel`**.
 The command name is a version selector, not an official release tag. There is no
@@ -20,34 +20,42 @@ Install [official Go](https://go.dev/dl/) **1.24.6 or later** and
 No host C compiler is required for the installer. In a terminal or PowerShell:
 
 ```text
-go install github.com/ZxillyFork/go-hmos-installer/go1.27.2@latest
-go1.27.2 download
-go1.27.2 version
+go install github.com/ZxillyFork/go-hmos-installer/go1.27.2-hmos@latest
+go1.27.2-hmos download
+go1.27.2-hmos version
 ```
 
 The first command installs the small launcher in `GOBIN` (normally the `bin`
 directory of `GOPATH`, usually `$HOME/go/bin`). That directory must be on PATH;
 otherwise invoke the launcher by its full path.
 
-**Launcher name collision:** the official `golang.org/dl/go1.27.2` wrapper also
-installs a binary named `go1.27.2`. They cannot coexist in the same `GOBIN`;
-installing one there replaces the other launcher. If you use both, choose a
-separate `GOBIN` for this fork (for example `$HOME/go-hmos/bin`) and invoke it by
-full path. The fork's SDK storage is separate: it uses `~/sdk/go1.27.2-hmos`,
-never the official wrapper's `~/sdk/go1.27.2` directory.
+The fork's launcher is named `go1.27.2-hmos`, so it can coexist in the same
+`GOBIN` with the official `golang.org/dl/go1.27.2` launcher named `go1.27.2`.
+Its SDK storage is also separate: `~/sdk/go1.27.2-hmos` rather than the official
+wrapper's `~/sdk/go1.27.2` directory.
+
+If you installed this fork's earlier `go1.27.2` command, switch to
+`go1.27.2-hmos`. The new command reuses the existing fork SDK at
+`~/sdk/go1.27.2-hmos`; it does not remove or replace the old launcher. You can
+inspect an existing launcher with `go version -m /path/to/go1.27.2` (add `.exe`
+on Windows) to identify which module provided it. To restore
+an official launcher that the earlier command replaced, run
+`go install golang.org/dl/go1.27.2@latest` in the same `GOBIN`. Historical
+installer revisions remain unchanged, but the current module no longer provides
+the fork's old `go1.27.2` package.
 
 For the default launcher location:
 
 ```sh
 # Linux/macOS
-"$HOME/go/bin/go1.27.2" download
-"$HOME/go/bin/go1.27.2" version
+"$HOME/go/bin/go1.27.2-hmos" download
+"$HOME/go/bin/go1.27.2-hmos" version
 ```
 
 ```powershell
 # Windows PowerShell
-& "$HOME/go/bin/go1.27.2.exe" download
-& "$HOME/go/bin/go1.27.2.exe" version
+& "$HOME/go/bin/go1.27.2-hmos.exe" download
+& "$HOME/go/bin/go1.27.2-hmos.exe" version
 ```
 
 `download` fetches the fixed source and **compiles Go**, which can take several
@@ -57,7 +65,7 @@ completed build. It accepts no branch, commit, CL number, or other arguments.
 Go installs the launcher using its normal module/checksum mechanisms. To pin
 that launcher revision too, replace `latest` with a reviewed full **installer
 commit SHA** from this repository. `@latest` updates the launcher implementation;
-the `go1.27.2` command remains tied to its embedded source commit. A future
+the `go1.27.2-hmos` command remains tied to its embedded source commit. A future
 toolchain version gets a separate command package and executable.
 
 ## Use and storage
@@ -65,12 +73,12 @@ toolchain version gets a separate command package and executable.
 Use the versioned command just like `go`, including `install`:
 
 ```text
-go1.27.2 help
-go1.27.2 env GOROOT GOVERSION
-go1.27.2 tool dist list
-go1.27.2 build ./...
-go1.27.2 test ./...
-go1.27.2 install example.org/tool@v1.2.3
+go1.27.2-hmos help
+go1.27.2-hmos env GOROOT GOVERSION
+go1.27.2-hmos tool dist list
+go1.27.2-hmos build ./...
+go1.27.2-hmos test ./...
+go1.27.2-hmos install example.org/tool@v1.2.3
 ```
 
 The final example is a placeholder; substitute the package you want to install.
@@ -82,7 +90,7 @@ Its stdin, stdout, stderr, and exit status are forwarded.
 Each version has its own directory under `~/sdk`, for example
 `~/sdk/go1.27.2-hmos/toolchains/<source-commit>-<host-os>-<host-arch>`.
 Set `GOHMOS_SDK_HOME` to a different **parent** SDK directory if needed; each
-command still gets its own `<command>-hmos` subdirectory. Use the same setting for
+command still gets its own command-named subdirectory. Use the same setting for
 `download` and subsequent commands. A versioned command does not use the legacy
 `GOHMOS_HOME` variable or `current.json` selection, and cannot select another
 version's cached toolchain.
@@ -123,7 +131,7 @@ selection in `~/sdk/go-hmos/current.json`. The installed launcher discovers a
 custom home beside its own `bin` directory. It forwards other Go arguments with
 `GOTOOLCHAIN=local`.
 
-Installing or using `go1.27.2` does not upgrade that legacy toolchain or
+Installing or using `go1.27.2-hmos` does not upgrade that legacy toolchain or
 change its selection. Use the new versioned command explicitly for the newer
 source. Future versioned commands can coexist in the same launcher directory.
 
