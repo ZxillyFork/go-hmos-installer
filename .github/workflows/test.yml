@@ -27,18 +27,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
           cache: false
       - name: Installer unit tests
         run: go test -v ./...
       - name: Static checks
         run: go vet ./...
-      - name: Source install, cached reinstall, and host smoke test
+      - name: Legacy source install, cached reinstall, and host smoke test
         env:
           GOHMOS_TEST_REPOSITORY: https://github.com/ZxillyFork/go-hmos.git
-        run: go test -v -run '^TestRealInstallation$' -timeout 25m
+        run: go test ./internal/toolchain -v -run '^TestRealInstallation$' -timeout 35m
+      - name: Versioned source install, public command, and security regressions
+        env:
+          GOHMOS_TEST_REPOSITORY: https://github.com/ZxillyFork/go-hmos.git
+        run: go test ./internal/toolchain -v -run '^TestRealVersionInstallation$' -timeout 35m

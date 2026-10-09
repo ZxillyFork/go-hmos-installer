@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package toolchain
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 const testCommit = "0123456789012345678901234567890123456789"
 
 func TestBootstrapVersion(t *testing.T) {
-	for version, want := range map[string]bool{"go1.24.5": false, "go1.24.6": true, "go1.24.6garbage": false, "go1.24rc2": false, "go1.25.0": true, "go1.27.1": true, "go1.27.1-hmos-devel": true, "go1.9.9": false, "devel go1.28": false, "garbage": false} {
+	for version, want := range map[string]bool{"go1.24.5": false, "go1.24.6": true, "go1.24.6garbage": false, "go1.24rc2": false, "go1.25.0": true, "go1.27.1": true, "go1.27.1-hmos-devel": true, "go1.27.2": true, "go1.27.2-hmos-devel": true, "go1.9.9": false, "devel go1.28": false, "garbage": false} {
 		if got := bootstrapVersionOK(version); got != want {
 			t.Errorf("%q: got %v, want %v", version, got, want)
 		}
@@ -196,12 +196,20 @@ func TestRealInstallation(t *testing.T) {
 	if err != nil || !bytes.Contains(output, []byte("gohmos host smoke passed")) {
 		t.Fatalf("host smoke: %s %v", output, err)
 	}
-	// Exercise the public install path when the local source uses the release pin.
+	if commit == sourceCommit {
+		cmd = exec.Command(goexe, "env", "GOVERSION")
+		cmd.Env = replaceEnv(cleanBuildEnv(os.Environ(), runtime.GOROOT(), filepath.Join(home, "cache")), map[string]string{"GOROOT": root})
+		output, err = cmd.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(output)) != "go1.27.1-hmos-devel" {
+			t.Fatalf("legacy toolchain version: %s %v", output, err)
+		}
+	}
+	// Exercise the public install path when the local source uses the legacy pin.
 	// This verifies launcher copying, custom-home discovery, forwarding, and a
 	// cached install through the installed launcher itself, without network.
 	if commit == sourceCommit {
 		temporaryLauncher := filepath.Join(home, executable("temporary-launcher"))
-		cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "build", "-buildvcs=false", "-o", temporaryLauncher, ".")
+		cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "build", "-buildvcs=false", "-o", temporaryLauncher, "../..")
 		cmd.Env = isolatedGitEnv(os.Environ())
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build launcher: %s %v", output, err)
@@ -251,7 +259,7 @@ func TestInstalledLauncher(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(launcher), 0700); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "build", "-buildvcs=false", "-o", launcher, ".")
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "build", "-buildvcs=false", "-o", launcher, "../..")
 	cmd.Env = replaceEnv(os.Environ(), map[string]string{"GOTOOLCHAIN": "local"})
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build launcher: %s %v", output, err)
@@ -277,6 +285,9 @@ func TestBootstrapFallback(t *testing.T) {
 }
 
 func TestPinnedSource(t *testing.T) {
+	if sourceCommit != "50a9db343e53ec569374c328998b3ffbada8f850" {
+		t.Fatal("legacy source pin changed")
+	}
 	if !fullCommit.MatchString(sourceCommit) {
 		t.Fatalf("installer source pin is not a full commit: %q", sourceCommit)
 	}
