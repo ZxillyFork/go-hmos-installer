@@ -24,6 +24,7 @@ import (
 )
 
 var testVersion = Version{Name: "go1.27.2-hmos", Commit: "b637b8617624655906b737977f50de5280bf7f65", GOVersion: "go1.27.2-hmos-devel"}
+var candidateVersion = Version{Name: "go1.27.4-hmos", Commit: "81bad8b625b9c845961010ea2af776a3cb426b4a", GOVersion: "go1.27.4-hmos-devel"}
 
 func TestVersionHomes(t *testing.T) {
 	base := t.TempDir()
@@ -185,7 +186,7 @@ func installCommandsInto(t *testing.T, bin string) string {
 	if runtime.GOOS == "windows" {
 		u.Path = "/" + u.Path
 	}
-	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "install", module+"@latest", module+"/"+testVersion.Name+"@latest")
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", executable("go")), "install", module+"@latest", module+"/"+testVersion.Name+"@latest", module+"/"+candidateVersion.Name+"@latest")
 	cmd.Env = replaceEnv(os.Environ(), map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off", "GOFLAGS": "-modcacherw", "GOSUMDB": "off", "GONOSUMDB": "", "GONOPROXY": "", "GOPRIVATE": "", "GOPROXY": u.String(), "GOBIN": bin, "GOMODCACHE": filepath.Join(base, "modcache")})
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go install @latest through local proxy: %s %v", output, err)
@@ -284,10 +285,17 @@ func TestOfficialLauncherCoexistence(t *testing.T) {
 }
 
 func TestInstalledVersionCommand(t *testing.T) {
+	for _, v := range []Version{testVersion, candidateVersion} {
+		t.Run(v.Name, func(t *testing.T) { testInstalledVersionCommand(t, v) })
+	}
+}
+
+func testInstalledVersionCommand(t *testing.T, testVersion Version) {
 	bin := installCommands(t)
 	launcher := filepath.Join(bin, executable(testVersion.Name))
 	legacy := filepath.Join(bin, executable("go-hmos-installer"))
-	for _, check := range []struct{ exe, want string }{{legacy, sourceCommit}, {launcher, testVersion.Commit}} {
+	candidate := filepath.Join(bin, executable(candidateVersion.Name))
+	for _, check := range []struct{ exe, want string }{{legacy, sourceCommit}, {launcher, testVersion.Commit}, {candidate, candidateVersion.Commit}} {
 		out, err := exec.Command(check.exe, "--version").CombinedOutput()
 		if err != nil || !strings.Contains(string(out), check.want) {
 			t.Fatalf("%s --version: %s %v", check.exe, out, err)
@@ -389,14 +397,22 @@ func TestInstalledVersionCommand(t *testing.T) {
 // Explicit opt-in: build the new command's exact source pin, then exercise the
 // installed command's cached download, relocation, host run, and security tests.
 func TestRealVersionInstallation(t *testing.T) {
+	runRealVersionInstallation(t, testVersion)
+}
+
+func TestRealCandidateVersionInstallation(t *testing.T) {
+	runRealVersionInstallation(t, candidateVersion)
+}
+
+func runRealVersionInstallation(t *testing.T, v Version) {
 	repository := os.Getenv("GOHMOS_TEST_REPOSITORY")
 	if repository == "" {
 		t.Skip("set GOHMOS_TEST_REPOSITORY to run the pinned source bootstrap")
 	}
 	bin := installCommands(t)
-	launcher := filepath.Join(bin, executable(testVersion.Name))
+	launcher := filepath.Join(bin, executable(v.Name))
 	base := filepath.Join(t.TempDir(), "versioned SDK with spaces")
-	home := filepath.Join(base, testVersion.Name)
+	home := filepath.Join(base, v.Name)
 	t.Setenv("GIT_DIR", filepath.Join(base, "unrelated repo"))
 	t.Setenv("GIT_WORK_TREE", filepath.Join(base, "unrelated worktree"))
 	t.Setenv("GOOS", "openharmony")
@@ -404,7 +420,7 @@ func TestRealVersionInstallation(t *testing.T) {
 	t.Setenv("CC", "nonexistent target compiler")
 	t.Setenv("CGO_ENABLED", "1")
 	t.Setenv("GOTOOLCHAIN", "go99.0.0+auto")
-	i := installer{home: home, repository: repository, commit: testVersion.Commit, version: testVersion.GOVersion, bootstrap: runtime.GOROOT(), out: os.Stderr, pinned: true}
+	i := installer{home: home, repository: repository, commit: v.Commit, version: v.GOVersion, bootstrap: runtime.GOROOT(), out: os.Stderr, pinned: true}
 	root, err := i.install()
 	if err != nil {
 		t.Fatal(err)
@@ -417,7 +433,7 @@ func TestRealVersionInstallation(t *testing.T) {
 	cmd := exec.Command(launcher, "download")
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
-	if err != nil || !bytes.Contains(output, []byte("Using cached toolchain "+testVersion.Commit)) {
+	if err != nil || !bytes.Contains(output, []byte("Using cached toolchain "+v.Commit)) {
 		t.Fatalf("cached public download: %s %v", output, err)
 	}
 	second, err := os.Stat(filepath.Join(root, "bin", executable("go")))
@@ -430,7 +446,7 @@ func TestRealVersionInstallation(t *testing.T) {
 	cmd = exec.Command(launcher, "env", "GOROOT", "GOVERSION", "GOTOOLCHAIN")
 	cmd.Env = env
 	output, err = cmd.CombinedOutput()
-	if err != nil || strings.TrimSpace(strings.ReplaceAll(string(output), "\r\n", "\n")) != root+"\n"+testVersion.GOVersion+"\nlocal" {
+	if err != nil || strings.TrimSpace(strings.ReplaceAll(string(output), "\r\n", "\n")) != root+"\n"+v.GOVersion+"\nlocal" {
 		t.Fatalf("relocated command: %s %v", output, err)
 	}
 	program := filepath.Join(home, "hello.go")

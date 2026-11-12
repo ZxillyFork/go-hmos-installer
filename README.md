@@ -13,7 +13,32 @@ official go-hmos release or prebuilt binary for this snapshot. This remains an
 experimental OpenHarmony port, with no claim of commercial HarmonyOS NEXT device
 compatibility.
 
-## Install a versioned command
+## Go 1.27.4 versioned command
+
+The new, independently named **`go1.27.4-hmos`** launcher is pinned to source
+[`81bad8b625b9c845961010ea2af776a3cb426b4a`](https://github.com/ZxillyFork/go-hmos/commit/81bad8b625b9c845961010ea2af776a3cb426b4a).
+Its toolchain reports **`go1.27.4-hmos-devel`**, never the official Go version name.
+It uses its own `~/sdk/go1.27.4-hmos/` directory (or an isolated subdirectory
+under `GOHMOS_SDK_HOME`) and does not replace `go`, `go1.27.4`, or the existing
+`go1.27.2-hmos` command.
+
+Install and build the pinned source with:
+
+```sh
+go install github.com/ZxillyFork/go-hmos-installer/go1.27.4-hmos@latest
+go1.27.4-hmos download
+go1.27.4-hmos --version
+```
+
+This launcher builds the experimental OpenHarmony fork from source. Linux binary
+prereleases are available from [go-hmos-build](https://github.com/ZxillyFork/go-hmos-build/releases).
+Host/toolchain checks, native SDK linking and device execution are separate
+validation stages; SDK linking does not prove device execution.
+
+## Previous versioned command — Go 1.27.2
+
+The section below documents the retained 1.27.2 command. It remains pinned
+at its historical revision and is not silently upgraded.
 
 Install [official Go](https://go.dev/dl/) **1.24.6 or later** and
 [Git](https://git-scm.com/downloads) first. Linux/macOS also need `bash`.
